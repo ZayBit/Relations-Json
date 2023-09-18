@@ -190,10 +190,10 @@ La estructura cambia dependiendo del estilo seleccionado
 
 `"list"`  muestra tanto el nombre del archivo y el porcentaje
 
-![](1.png)
+![1.png](https://i.postimg.cc/VNGF3pfb/1.png)
 `"list-bar"` muestra solamente el porcentaje de cada archivo
 
-![](2.png)
+![2.png](https://i.postimg.cc/RF2L0tnS/2.png)
 `"unique"` muestra unicamente un progreso por todos los archivos
 
-![](3.png)
+![3.png](https://i.postimg.cc/xCXPY58p/3.png)
