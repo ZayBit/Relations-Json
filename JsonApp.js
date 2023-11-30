@@ -1,47 +1,125 @@
 class JsonApp {
+  static path = require('path')
+  static fs = require('fs')
 
-  static Read(select) {
-    this.results = this.dataDB[select];
-    if(this.results){
+  static Read(property,limit) {
+    this.results = this.dataDB[property].filter(item=>item.id != "");
+    if (this.results) {
+      if(typeof limit === "number" && this.results.length > limit){
+        this.results.length = limit+1
+      }
       return this.results;
     }
-    return `Not Found ${select}`;
+    return `Not Found ${property}`;
   }
+  static find(property,id,callback){
+    if(!this.dataDB[property]) return
+    let result = this.dataDB[property].find(el=>el.id == id)
 
-  static insertKey(property = "", namekey = "") {
+    if(typeof callback === "function"){
+      callback(result)
+    }
+  }
+  static insertKey(config) {
+    const { property = "", namekey = "", callback } = config
+    // insert main key
+    if (!this.dataDB[property] && namekey == "") {
+      this.dataDB = { ...this.dataDB, [property]: [] };
+      this.fs.writeFileSync(this.dirDB, JSON.stringify(this.dataDB));
+      callback({
+        property,
+        namekey
+      })
+      return;
+    }
+    // insert a property to the property main
+    if (!this.dataDB[property]) return `Not Found ${property}`;
+    
+    if(this.dataDB[property].length){
 
-    if(!this.dataDB[property]) return `Not Found ${property}`;
-    if (this.dataDB[property][0][namekey] == namekey) return `The key: ${namekey} already exists`;
-    if(namekey.trim() == "") return `Key undefined`;
-    this.dataDB[property].reverse()
+      if (this.dataDB[property][0][namekey] == namekey)
+      return `The key: ${namekey} already exists`;
+
+    }
+
+    if (namekey.trim() == "") return `Key undefined`;
     this.dataDB[property][namekey] = "";
+
     let data = [];
-
-    this.dataDB[property].forEach((item) => {
-      data.push({ ...item, [namekey]: "" });
-    });
-
+    if(this.dataDB[property].length){
+      this.dataDB[property].forEach((item) => {
+        data.push({ ...item, [namekey]: "" });
+      });
+    }else{
+      data.push({[namekey]:''})
+    }
     this.dataDB[property] = data;
-    fs.writeFileSync(this.dirDB, JSON.stringify(this.dataDB));
-    this.dataDB[property].reverse()
+    this.fs.writeFileSync(this.dirDB, JSON.stringify(this.dataDB));
+    callback({
+      property,
+      namekey
+    })
   }
 
-  static deleteKey(property = "", namekey = "") {
-    if(!this.dataDB[property]) return `Not Found ${property}`;
-    if (this.dataDB[property][0][namekey] == undefined) return "Key no exist in the db";
+  static deleteKey(config) {
+    const { property = "", namekey = "", callback } = config;
+    // insert main key
+    if (this.dataDB[property] && namekey == "") {
+      delete this.dataDB[property]
+      this.fs.writeFileSync(this.dirDB, JSON.stringify(this.dataDB));
+      callback({
+        property,
+        namekey
+      })
+      return;
+    }
 
-    this.dataDB[property].reverse().filter((el) => delete el[namekey]);
-    fs.writeFileSync(this.dirDB, JSON.stringify(this.dataDB));
-    this.dataDB[property].reverse()
+    if (!this.dataDB[property]) return `Not Found ${property}`;
+
+    if (this.dataDB[property][0][namekey] == undefined)
+      return "Key no exist in the db";
+
+    if(Object.keys(this.dataDB[property][0]).length > 1){
+      this.dataDB[property].filter((el) => delete el[namekey]);
+    }else{
+      this.dataDB[property] = []
+    }
+    this.fs.writeFileSync(this.dirDB, JSON.stringify(this.dataDB));
+    callback({
+      property,
+      namekey
+    })
   }
 
-  static updateKey(property = "", namekey = "", newKey = "") {
-    if(!this.dataDB[property]) return `Not Found ${property}`;
+  static updateKey(config = {}) {
+    const { property = "", namekey = "", newKey = "" , callback } = config;
+    if (this.dataDB[property] && newKey == "") {
+
+     let obj = Object.entries(this.dataDB).map(([key,value])=>{
+      return  key == property ? [namekey,value] : [key,value] ;
+      })
+      let data = {}
+      obj.forEach(el=>{
+        data[el[0]] = el[1]
+      })
+      this.dataDB = data
+      this.fs.writeFileSync(this.dirDB, JSON.stringify(this.dataDB));
+      if(typeof callback === "function"){
+        callback({
+          property,
+          namekey,
+          newKey
+        })
+      }
+      return
+    }
+
+    if (!this.dataDB[property]) return `Not Found ${property}`;
     if (this.dataDB[property][0][namekey] == undefined) return `key undefined`;
     let data = [];
     let newItem = {};
 
-    this.dataDB[property].reverse().filter((el) => {
+    this.dataDB[property].filter((el) => {
       Object.keys(el).forEach((item) => {
         if (item === namekey) {
           newItem = { ...newItem, [newKey]: el[item] };
@@ -54,151 +132,205 @@ class JsonApp {
 
     this.dataDB[property] = data;
 
-    fs.writeFileSync(this.dirDB, JSON.stringify(this.dataDB));
-    this.dataDB[property].reverse()
-  }
-  static find(property, keyword = {}) {
-    if(!this.dataDB[property]) return `Not Found ${property}`;
-    let key = Object.keys(keyword);
-    let value = new RegExp(keyword[key].toString());
-    let result =
-      this.dataDB[property].find((el) => el[key].toString().match(value)) ?? false;
-    return result
-  }
-  static pagination(property, currentPage = 1, totalForPage = 5) {
-    if(!this.dataDB[property]) return `Not Found ${property}`;
-    let max = currentPage * totalForPage;
-    let fin = totalForPage;
-    let initial = max - fin;
-    let items = [];
-
-    for (initial; initial < max; initial++) {
-      let item = this.dataDB[property][initial];
-      if (!item) break;
-      items.push(item);
+    this.fs.writeFileSync(this.dirDB, JSON.stringify(this.dataDB));
+    if(typeof callback === "function"){
+      callback({
+        property,
+        namekey,
+        newKey
+      })
     }
-    
-    let total = Math.ceil(this.dataDB[property].length / totalForPage);
-    let pages = this.listPages(
-      total, // total items length
-      totalForPage, // max items for page
-      currentPage // current page
-    );
+  }
+  static search(property, keyword = {},callback) {
+    if (!this.dataDB[property]) return `Not Found ${property}`;
+    let key = Object.keys(keyword)[0];
+    let value = keyword.exact ? keyword[key].toString() : new RegExp(keyword[key].toString());
+    let result = "";
+    if(!keyword.exact){
+      result = this.dataDB[property].filter((el) => el[key].toString().match(value)) ??
+      false;
+    }else{
+      result = this.dataDB[property].filter((el) => el[key].toString() == value ) ??
+      false;
+    }
 
+    if(typeof callback === "function"){
+      callback(result)
+    }
+  }
+  static pagination(config = {}) {
+    let { items, currentPage = 1, numberItems, numberPages } = config;
+    if(!items.length) return []
+    currentPage = parseInt(currentPage)
+    let total = Math.ceil(items.length / numberItems);
+    // Items
+    const generateItems = (currentPage) => {
+      currentPage = currentPage > total ? total : currentPage;
+      let results = [];
+      let maxItems =
+        currentPage * numberItems > items.length
+          ? items.length
+          : currentPage * numberItems;
+      let initialItems = currentPage * numberItems - numberItems;
+  
+      for (initialItems; initialItems < maxItems; initialItems++) {
+        results.push(items[initialItems]);
+      }
+      return results;
+    };
+    // Pagination
+    const generatePagination = (currentPage) => {
+   
+      let prevPage = 2;
+      let nextPage = numberPages - prevPage;
+      
+      let max = currentPage + nextPage;
+
+      let min = currentPage - 1;
+      let pages = [];
+
+      if (max > total) {
+        max = total;
+        min = total - numberPages + 1;
+      }
+      if (total > numberPages) {
+        if (currentPage >= numberPages) {
+          pages.push(1, "...");
+          for (min; min <= max; min++) {
+            pages.push(min);
+          }
+          if (currentPage <= total && max < total) {
+            pages.push("...", total);
+          }
+        } else {
+          for (let i = 1; i <= numberPages; i++) {
+            pages.push(i);
+          }
+          pages.push("...", total);
+        }
+      } else {
+        for (let i = 1; i <= total; i++) {
+          pages.push(i);
+        }
+      }
+      return pages;
+    };
     return {
-      items,
-      pages,
+      pageResults: generateItems(currentPage),
+      pages: generatePagination(currentPage),
+      total
     };
   }
-  // create list of pages
-  static listPages(totalItems, totalForPage, currentPage) {
-    if (totalItems == 1) return [1];
+  
 
-    let totalNumberPages = totalForPage;
-    let countNumberPages = 0;
-    let pages = [];
-    let max = currentPage + totalNumberPages;
-
-    currentPage = currentPage - 1;
-
-    if (
-      currentPage + totalNumberPages - (totalNumberPages - 1) >=
-      totalItems - 1
-    ) {
-      max = totalItems + 1;
-      currentPage = max - totalNumberPages;
-    }
-
-    for (let i = currentPage; i < max; i++) {
-      countNumberPages++;
-      if (countNumberPages > totalNumberPages || countNumberPages > totalItems)
-        break;
-
-      if (currentPage + totalNumberPages == totalNumberPages) {
-        pages.push(i + 1);
-      } else {
-        pages.push(i);
-      }
-    }
-
-    return pages;
-  }
 
   static #insertData(property, newID, data) {
     data = { id: newID, ...data };
-    this.dataDB[property].reverse().push(data);
-    fs.writeFileSync(this.dirDB, JSON.stringify(this.dataDB));
-    this.dataDB[property].reverse()
+    this.dataDB[property].push(data);
+    this.fs.writeFileSync(this.dirDB, JSON.stringify(this.dataDB));
   }
+
   // insert
-  static Insert(property = "", data = {}) {
-    if(!this.dataDB[property]) return `Not Found ${property}`;
-    if(!Object.keys(data).length) return `Data is required`;
-    
+  static Insert(property = "", data = {}, callback) {
+    if (!this.dataDB[property]) return `Not Found ${property}`;
+    if (!Object.keys(data).length) return `Data is required`;
+
     let mainCompare = this.dataDB[property][0];
     let newID = 1;
-
     if (this.dataDB[property].length) {
+      
       if (!this.#compareStructure(mainCompare, data)) {
         newID = this.#idAutoIncrement(this.dataDB[property].map((el) => el.id));
         this.#insertData(property, newID, data);
       } else {
-        return "estructura incompatible";
+        console.log("estructura incompatible: ",property);
       }
     } else {
       this.#insertData(property, newID, data);
     }
 
-    return this.dataDB[property];
+    if(typeof callback === "function"){
+      callback(property, newID)
+    }
+  }
+  static SimpleUpdate = (property,data,callback)=>{
+    if (!this.dataDB[property]) return `Not Found ${property}`;
+    this.dataDB[property] = data;
+    this.fs.writeFileSync(this.dirDB, JSON.stringify(this.dataDB));
+    if(typeof callback === "function"){
+      callback()
+    }
   }
   // Update Item
-  static Update(property = "", data = {}) {
-    if(!this.dataDB[property]) return `Not Found ${property}`;
-    if (!data.id) {
-      return `Es necesario un id para actualizar un elemento de ${property}`;
+  static Update(property = "", data = {},callback) {
+    if (!this.dataDB[property]) return `Not Found ${property}`;
+
+    if(Object.keys(data).length && data.id == undefined){
+
+      Object.keys(data).forEach(key=>{
+        this.dataDB[property][0][key] = data[key]
+      })
+
+      this.fs.writeFileSync(this.dirDB, JSON.stringify(this.dataDB));
+
+      if(typeof callback === "function"){
+        callback({property})
+      }
+
+      return
     }
 
     let id = data.id;
     delete data.id;
 
-    let results = this.dataDB[property].reverse();
-    let item = results.filter((el) => el.id === id)[0];
-    if(item){
+    let results = this.dataDB[property];
+    let item = results.filter((el) => el.id == id)[0];
+
+    if (item) {
+
       Object.keys(data).forEach((el, i) => {
-        item[el] = data[el]
-      })
-      fs.writeFileSync(this.dirDB, JSON.stringify(this.dataDB));
-      this.dataDB[property].reverse()
+        item[el] = data[el];
+      });
+
+      this.fs.writeFileSync(this.dirDB, JSON.stringify(this.dataDB));;
+
+      if(typeof callback === "function"){
+        callback({property})
+      }
     }
 
   }
   // Delete Items
-  static Delete(property = "", id = null) {
-    if(!this.dataDB[property]) return `Not Found ${property}`;
+  static Delete(property = "", id = null,callback) {
+    if (!this.dataDB[property]) return `Not Found ${property}`;
     if (!id) {
       return `Es necesario un id para eliminar un elemento de ${property}`;
     }
 
     this.dataDB[property] = this.dataDB[property].filter((el) => el.id != id);
-    this.dataDB[property].reverse()
-    fs.writeFileSync(this.dirDB, JSON.stringify(this.dataDB));
-    this.dataDB[property].reverse()
+
+    this.fs.writeFileSync(this.dirDB, JSON.stringify(this.dataDB));
+
+    if(typeof callback === "function"){
+      callback(property, id)
+    }
   }
   // get db.json ( get data )
   static DB(dirDB = null) {
-    this.dirDB = dirDB ? dirDB : path.join(__dirname, "../", "db.json");
 
-    let db = fs.readFileSync(this.dirDB, (err, data) => {
+    this.dirDB = dirDB ? dirDB : this.path.join(__dirname, "../", "db.json");
+
+    let db = this.fs.readFileSync(this.dirDB, (err, data) => {
       if (err) throw err;
       return JSON.parse(data);
     });
-    
+
     this.dataDB = JSON.parse(db);
-    
-    Object.keys(this.dataDB).forEach(key=>{
-      this.dataDB[key].reverse()
-    })
-    
+
+    Object.keys(this.dataDB).forEach((key) => {
+      this.dataDB[key]
+    });
+
     return this;
   }
 
