@@ -1,5 +1,24 @@
 class UploadFiles {
-  static dirUploads = path.join(__dirname, "../uploads/");
+  static path = require("path");
+  static fs = require("fs");
+
+  static dirUploads = this.path.join(__dirname, "../uploads/");
+
+  static createFileNames = ( config )=>{
+    let {
+      srcListLength = 0,
+      manualFormat = '.jpg',
+      endCallback,
+    } = config;
+    let fileNames = []
+
+    for(let i = 0; i < srcListLength ; i++){
+      fileNames.push(this.#uniqueName(manualFormat))
+    }
+    if(typeof endCallback === 'function'){
+      endCallback(fileNames)
+    }
+  }
 
   static Upload(config = {}) {
     let {
@@ -7,9 +26,9 @@ class UploadFiles {
       dest,
       manualFormat = false,
       formats = [],
-      preview = false,
       torewrite = [],
       viewProgress = {},
+      upload = true,
       endCallback,
     } = config;
 
@@ -23,7 +42,7 @@ class UploadFiles {
     if (!srcList.length || !totalLinks) return false;
 
     if (dest) {
-      this.dirUploads = path.join(__dirname, dest);
+      this.dirUploads = this.path.join(__dirname, dest);
       dest = this.dirUploads;
     } else {
       dest = this.dirUploads;
@@ -55,19 +74,25 @@ class UploadFiles {
       let fullPathFile = `${dest}${fileName}`;
 
       files.push(fileName);
-      
-      let { size } = fs.statSync(src);
+      if (!upload) {
+        if (i == srcList.length - 1) {
+          endCallback(files);
+        }
+        return;
+      }
 
-      let writer = fs.createWriteStream(fullPathFile, {
+      let { size } = this.fs.statSync(src);
+
+      let writer = this.fs.createWriteStream(fullPathFile, {
         flags: "w",
       });
 
-      let reader = fs.createReadStream(src).pipe(writer);
+      let reader = this.fs.createReadStream(src).pipe(writer);
       if (viewProgress.selector) {
         if (viewProgress.style != "unique" || totalLinks == 1) {
           let span = showProgress(src, viewProgress);
 
-          fs.createReadStream(src).on("data", (chunk) => {
+          this.fs.createReadStream(src).on("data", (chunk) => {
             progress += chunk.length;
             progressChunk({ size, span, progress });
           });
@@ -80,7 +105,7 @@ class UploadFiles {
           endProcess({ countConectionsClosed, viewProgress, totalLinks, span });
         }
         if (countConectionsClosed == totalLinks) {
-          if(typeof endCallback === "function"){
+          if (typeof endCallback === "function") {
             endCallback(files);
           }
         }
@@ -107,6 +132,7 @@ class UploadFiles {
     // Default formats
     let allFormats = [
       ".jpg",
+      ".jpeg",
       ".png",
       ".gif",
       ".mp3",
@@ -129,20 +155,31 @@ class UploadFiles {
     }
     return false;
   }
-  static removeFile(srcList, func) {
+  static removeFile(srcList, callback) {
+    let countRemoveFiles = 0
     srcList.forEach((src) => {
-      let dir = path.join(this.dirUploads, src);
+      let dir = this.path.join(this.dirUploads, src);
+     
       try {
-        if (fs.statSync(dir)) {
+        if (this.fs.statSync(dir)) {
           try {
-            fs.unlinkSync(dir);
-            func(dir);
+
+            this.fs.unlinkSync(dir);
+
+            countRemoveFiles++;
+            if( typeof callback === "function" && countRemoveFiles == srcList.length ){
+              callback(dir);
+            }
           } catch (error) {
-            func(error);
+            if(typeof callback === "function"){
+              callback(error);
+            }
           }
         }
       } catch (error) {
-        func(error);
+        if(typeof callback === "function"){
+          callback(error);
+        }
       }
     });
   }
@@ -217,6 +254,7 @@ class UploadFiles {
       srcList,
       viewProgress = {},
       format = ".jpg",
+      torewrite = [],
       endCallback = false,
     } = config || {};
 
@@ -233,17 +271,28 @@ class UploadFiles {
     let progressChunk = progressFunctions ? this.#progressChunk : null;
     let endProcess = progressFunctions ? this.#endProcess : null;
 
+    const request = require('request');
+
     srcList.forEach((src, i) => {
       let progress = 0;
       if (viewProgress.style == "unique" && span == null) {
         span = showProgress(src, viewProgress);
       }
       fetch(src).then((res) => {
-        let fileName = this.#uniqueName(format);
+        let fileName = "";
+
+        if (torewrite[i]) {
+          fileName = torewrite[i];
+        } else {
+          fileName = this.#uniqueName(format);
+        }
 
         let fullPathFile = `${this.dirUploads}${fileName}`;
-        let fileStream = fs.createWriteStream(fullPathFile);
 
+        let fileStream = this.fs.createWriteStream(fullPathFile, {
+          flags: "w",
+        });
+        
         files.push(fileName);
 
         res.body.pipe(fileStream);
